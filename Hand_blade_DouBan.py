@@ -2,6 +2,7 @@ import requests
 import re
 import csv
 from time import sleep
+import sqlite3
 
 headers = {
     "User-Agent": "Mozilla/5.0 (iPad; CPU OS 11_0 like Mac OS X) AppleWebKit/604.1.34 (KHTML, like Gecko) Version/11.0 Mobile/15A5341f Safari/604.1"
@@ -12,15 +13,28 @@ obj = re.compile(r'ic_play_web@2x.png"/>(?P<film_name>.*?)</a>.*?rating_nums">(?
 obj_menu = re.compile(r'<br/>[内內]地票房年度[总總]排行：(?P<year>.*?)年(电影|電影) .*?">(?P<domain_pre>.*?)<wbr/>'
                       r'(?P<domain_suffix>.*?)(<wbr/>|</a>)', re.S)
 
+conn = sqlite3.connect("film_info.db")
+c = conn.cursor()
+
 def bug_catch(file_name,url):
+    table_name = "film_info_" + file_name
+    # 创建数据表
+    c.execute('''
+                CREATE TABLE if not exists %s (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 film_name TEXT NOT NULL,
+                                 rating TEXT,
+                                 kind TEXT,
+                                 time TEXT,
+                                 total_price TEXT)
+            ''' % table_name)
+    conn.commit()
     f = open(file_name+".csv", "w")
     csvwriter = csv.writer(f)
     for j in range(0, 6):
         new_url = url + "?start=" + str(25 * j)
-        print("正在手刃"+new_url)
+        print("正在手刃 "+new_url)
         resp = requests.get(new_url, headers=headers)
         page_content = resp.text
-
         content = obj.finditer(page_content)
 
         for i in content:
@@ -31,10 +45,17 @@ def bug_catch(file_name,url):
             dic['time'] = dic['time'].strip()
             dic['total_price'] = dic['total_price'].strip()
             csvwriter.writerow(dic.values())
+
+            sql = '''INSERT INTO %s (film_name,rating,kind,time,total_price) 
+                    values('%s','%s','%s','%s','%s')''' % (table_name,dic['film_name'],dic['rating'],
+                                                           dic['kind'],dic['time'],dic['total_price'])
+            c.execute(sql)
+            conn.commit()
+
         sleep(2)
         resp.close()
     f.close()
-    print(file_name + "年数据手刃完毕,已导出至" + file_name + ".csv")
+    print(file_name,"年数据手刃完毕,已导出至",file_name,".csv和数据库film_info.db的表",table_name)
 
 def main():
     print("请稍等......")
@@ -60,7 +81,7 @@ def main():
     # bug_catch("2011","https://www.douban.com/doulist/665041/")
     # bug_catch("2010","https://www.douban.com/doulist/226207/")
     # bug_catch("2009","https://www.douban.com/doulist/226734/")
-
+    conn.close()
 
 if __name__ == "__main__":
     main()
